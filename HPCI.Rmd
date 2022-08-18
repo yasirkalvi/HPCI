@@ -1,0 +1,243 @@
+---
+title: "uk_temperature.txt"
+author: "YKA"
+date: "4/20/2022"
+output: html_document
+---
+
+
+```{r}
+fin <- read.csv("/Users/YKA/Downloads/stockerbot-export.csv")
+head(fin)
+library(tidyverse)
+fin$text <- str_replace_all(fin$text, "[[:punct:]]", "")
+
+fin$text <- gsub("[^[:alnum:]]", " ", fin$text)
+
+fin$text <- gsub("","" , fin$text ,ignore.case = TRUE)
+
+fin$text <- noquote(fin$text)
+
+head(fin$text)
+```
+```{r}
+head(fin)
+
+skim(fin)
+```
+
+```{r}
+write.table(fin$text, file = "/Users/YKA/Downloads/fin_tweetss.txt", sep = "/t",
+            row.names = FALSE, col.names = FALSE)
+
+write.csv(fin$text, "/Users/YKA/Downloads/fin_tweets.csv",row.names = FALSE)
+```
+
+```{r}
+fintweets = fin$text
+```
+
+
+```{r}
+ clean_tweet = gsub("&amp", "", fintweets)
+  clean_tweet = gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", clean_tweet)
+  clean_tweet = gsub("@\\w+", "", clean_tweet)
+  clean_tweet = gsub("[[:punct:]]", "", clean_tweet)
+  clean_tweet = gsub("[[:digit:]]", "", clean_tweet)
+  clean_tweet = gsub("http\\w+", "", clean_tweet)
+  clean_tweet = gsub("[ \t]{2,}", "", clean_tweet)
+  clean_tweet = gsub("^\\s+|\\s+$", "", clean_tweet)
+
+
+head(clean_tweet)
+
+
+#get rid of unnecessary spaces
+clean_tweet <- str_replace_all(clean_tweet," "," ")
+# Get rid of URLs
+clean_tweet <- str_replace_all(clean_tweet, "http://t.co/[a-z,A-Z,0-9]*{8}","")
+# Take out retweet header, there is only one
+clean_tweet <- str_replace(clean_tweet,"RT @[a-z,A-Z]*: ","")
+# Get rid of hashtags
+clean_tweet <- str_replace_all(clean_tweet,"#[a-z,A-Z]*","")
+# Get rid of references to other screennames
+clean_tweet <- str_replace_all(clean_tweet,"@[a-z,A-Z]*","")   
+```
+##Tweets cleaning:
+
+```{r}
+# load twitter library - the rtweet library is recommended now over twitteR
+library(rtweet)
+# plotting and pipes - tidyverse!
+library(ggplot2)
+library(dplyr)
+# text mining library
+#install.packages("tidytext")
+library(tidytext)
+# plotting packages
+#install.packages("igraph")
+library(igraph)
+#install.packages("ggraph")
+library(ggraph)
+```
+
+
+#removing links
+```{r}
+fin$stripped_text <- gsub("http.*","",  fin$text)
+fin$stripped_text <- gsub("https.*","", fin$stripped_text)
+```
+
+#converting text to lowercase and removing punctuation:
+```{r}
+# remove punctuation, convert to lowercase, add id for each tweet!
+fin_clean <- fin %>%
+  dplyr::select(stripped_text) %>%
+  unnest_tokens(word, stripped_text)
+```
+
+
+
+
+```{r}
+
+fin_clean %>%
+  count(word, sort = TRUE) %>%
+  top_n(15) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(x = word, y = n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() +
+      labs(x = "Count",
+      y = "Unique words",
+      title = "Count of unique words found in tweets")
+
+
+```
+
+#Removing stop words from tweets:
+
+```{r}
+# load list of stop words - from the tidytext package
+data("stop_words")
+
+head(stop_words)
+
+
+nrow(fin_clean)
+
+
+# remove stop words from your list of words
+cleaned_tweet_words <- fin_clean %>%
+  anti_join(stop_words)
+
+# there should be fewer words now
+nrow(cleaned_tweet_words)
+
+head(cleaned_tweet_words)
+head(fin_clean)
+```
+Plotting unique words:
+
+```{r}
+# plot the top 15 words -- notice any issues?
+cleaned_tweet_words %>%
+  count(word, sort = TRUE) %>%
+  top_n(15) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(x = word, y = n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() +
+      labs(y = "Count",
+      x = "Unique words",
+      title = "Count of unique words found in tweets",
+      subtitle = "Stop words removed from the list")
+```
+
+```{r}
+write.csv(cleaned_tweet_words, "/Users/YKA/Downloads/cleaned_tweet_words.csv",row.names = FALSE)
+```
+
+
+
+
+```{r}
+#install.packages("devtools")
+library(devtools)
+#install_github("dgrtwo/widyr")
+library(widyr)
+
+# remove punctuation, convert to lowercase, add id for each tweet!
+fin_tweets_paired_words <- fin %>%
+  dplyr::select(stripped_text) %>%
+  unnest_tokens(paired_words, stripped_text, token = "ngrams", n = 2)
+
+fin_tweets_paired_words %>%
+  count(paired_words, sort = TRUE)
+## # A tibble: 134,656 x 2
+##    paired_words         n
+##    <chr>            <int>
+##  1 fin change    1021
+##  2 of the             804
+##  3 in the             798
+##  4 finchange is   570
+##  5 is a               442
+##  6 of finchange   437
+##  7 on the             383
+##  8 on finchange   364
+##  9 to the             354
+## 10 this is            331
+## # … with 134,646 more rows
+library(tidyr)
+fin_tweets_separated_words <- fin_tweets_paired_words %>%
+  separate(paired_words, c("word1", "word2"), sep = " ")
+
+fin_tweets_filtered <- fin_tweets_separated_words %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+# new bigram counts:
+fin_words_counts <- fin_tweets_filtered %>%
+  count(word1, word2, sort = TRUE)
+
+head(fin_words_counts)
+## # A tibble: 6 x 3
+##   word1         word2             n
+##   <chr>         <chr>         <int>
+## 1 fin       change         1021
+## 2 finchange fincrisis   232
+## 3 finchange globalwarming   147
+## 4 global        warming         141
+## 5 hurricane     dorian          113
+## 6 fin       crisis          100
+```
+
+Plot:
+
+```{r}
+library(igraph)
+library(ggraph)
+
+# plot fin change word network
+# (plotting graph edges is currently broken)
+fin_words_counts %>%
+        filter(n >= 24) %>%
+        graph_from_data_frame() %>%
+        ggraph(layout = "fr") +
+        # geom_edge_link(aes(edge_alpha = n, edge_width = n))
+        # geom_edge_link(aes(edge_alpha = n, edge_width = n)) +
+        geom_node_point(color = "darkslategray4", size = 3) +
+        geom_node_text(aes(label = name), vjust = 1.8, size = 3) +
+        labs(title = "Word Network: Tweets using the hashtag - fin Change", 
+             subtitle = "Text mining twitter data ",
+             x = "", y = "")
+```
+
+
+
+
+
+
+
